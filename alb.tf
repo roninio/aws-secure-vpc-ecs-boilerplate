@@ -5,9 +5,13 @@ resource "aws_lb" "main" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 
-  tags = {
-    Name = var.app_name
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-alb"
+      Description = "Application Load Balancer for public traffic and Cognito auth"
+    }
+  )
 }
 
 resource "aws_lb_target_group" "app_frontend" {
@@ -35,7 +39,8 @@ resource "aws_lb_target_group" "app_frontend" {
   }
 
   tags = {
-    Name = "${var.app_name}-app-frontend-tg"
+    Name        = "${var.app_name}-app-frontend-tg"
+    Description = "Target group for app-frontend ECS service"
   }
 }
 

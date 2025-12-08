@@ -8,7 +8,11 @@ resource "aws_dynamodb_table" "main" {
     type = "S"
   }
 
-  tags = {
-    Name = "${var.app_name}-table"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-table"
+      Description = "DynamoDB table for application data storage"
+    }
+  )
 }

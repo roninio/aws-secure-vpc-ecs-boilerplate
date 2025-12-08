@@ -1,9 +1,14 @@
 resource "aws_ecs_cluster" "main" {
   name = "${var.app_name}-cluster"
 
-  tags = {
-    Name = "${var.app_name}-cluster"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-cluster"
+      Description = "ECS Fargate cluster for containerized services"
+      Type        = "Cluster"
+    }
+  )
 }
 
 # CloudWatch Log Groups for ECS tasks
@@ -12,7 +17,8 @@ resource "aws_cloudwatch_log_group" "backend" {
   retention_in_days = 7
 
   tags = {
-    Name = "${var.app_name}-backend-logs"
+    Name        = "${var.app_name}-backend-logs"
+    Description = "CloudWatch logs for backend service"
   }
 }
 
@@ -21,7 +27,8 @@ resource "aws_cloudwatch_log_group" "app_frontend" {
   retention_in_days = 7
 
   tags = {
-    Name = "${var.app_name}-app-frontend-logs"
+    Name        = "${var.app_name}-app-frontend-logs"
+    Description = "CloudWatch logs for app-frontend service"
   }
 }
 
@@ -43,7 +50,8 @@ resource "aws_ecs_task_definition" "backend" {
   }
 
   tags = {
-    Name = "${var.app_name}-backend-task"
+    Name        = "${var.app_name}-backend-task"
+    Description = "Task definition for FastAPI backend service"
   }
 
   container_definitions = jsonencode([
@@ -100,7 +108,8 @@ resource "aws_ecs_task_definition" "app_frontend" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
   tags = {
-    Name = "${var.app_name}-app-frontend-task"
+    Name        = "${var.app_name}-app-frontend-task"
+    Description = "Task definition for Next.js app-frontend service"
   }
 
   container_definitions = jsonencode([
@@ -170,9 +179,13 @@ resource "aws_ecs_service" "backend" {
     registry_arn = aws_service_discovery_service.backend.arn
   }
 
-  tags = {
-    Name = "${var.app_name}-backend-service"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-backend-service"
+      Description = "FastAPI backend service for internal VPC communication"
+    }
+  )
 }
 
 # App Frontend Service (ALB-authenticated)
@@ -197,7 +210,11 @@ resource "aws_ecs_service" "app_frontend" {
 
   depends_on = [aws_lb_listener.https]
 
-  tags = {
-    Name = "${var.app_name}-app-frontend-service"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-app-frontend-service"
+      Description = "Next.js app-frontend service accessible through ALB with Cognito authentication"
+    }
+  )
 }

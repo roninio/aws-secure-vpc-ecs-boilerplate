@@ -27,9 +27,13 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "${var.app_name}-alb-sg"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-alb-sg"
+      Description = "Security group for Application Load Balancer"
+    }
+  )
 }
 
 # Security Group for ECS Tasks

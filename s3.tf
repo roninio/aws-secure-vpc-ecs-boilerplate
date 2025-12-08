@@ -2,9 +2,13 @@
 resource "aws_s3_bucket" "file_uploads" {
   bucket = "${var.app_name}-file-uploads-${data.aws_caller_identity.current.account_id}"
 
-  tags = {
-    Name = "${var.app_name}-file-uploads"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-file-uploads"
+      Description = "S3 bucket for user file uploads with versioning and encryption"
+    }
+  )
 }
 
 # Block all public access to the bucket

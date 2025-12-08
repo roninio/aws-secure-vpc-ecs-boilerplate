@@ -28,6 +28,7 @@ resource "aws_acm_certificate" "cert" {
   certificate_body = tls_self_signed_cert.example.cert_pem
 
   tags = {
-    Name = "${var.app_name}-self-signed-cert"
+    Name        = "${var.app_name}-self-signed-cert"
+    Description = "Self-signed TLS certificate for ALB HTTPS listener"
   }
 }

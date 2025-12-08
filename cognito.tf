@@ -16,6 +16,11 @@ resource "aws_cognito_user_pool" "main" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  tags = {
+    Name        = "${var.app_name}-user-pool"
+    Description = "AWS Cognito user pool for application authentication"
+  }
+
   schema {
     name                = "app_name"
     attribute_data_type = "String"
@@ -33,9 +38,6 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  tags = {
-    Name = "${var.app_name}-user-pool"
-  }
 }
 
 resource "aws_cognito_user_pool_client" "client" {

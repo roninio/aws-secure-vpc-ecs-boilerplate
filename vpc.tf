@@ -4,9 +4,13 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = {
-    Name = "${var.app_name}-vpc"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name        = "${var.app_name}-vpc"
+      Description = "Main VPC for ECS infrastructure"
+    }
+  )
 }
 
 # Availability Zones
@@ -22,7 +26,9 @@ resource "aws_subnet" "public" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name = "${var.app_name}-public-subnet-${count.index + 1}"
+    Name        = "${var.app_name}-public-subnet-${count.index + 1}"
+    Type        = "Public"
+    Description = "Public subnet for ALB and NAT Gateway"
   }
 }
 
@@ -34,7 +40,9 @@ resource "aws_subnet" "private" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name = "${var.app_name}-private-subnet-${count.index + 1}"
+    Name        = "${var.app_name}-private-subnet-${count.index + 1}"
+    Type        = "Private"
+    Description = "Private subnet for ECS Fargate tasks"
   }
 }
 

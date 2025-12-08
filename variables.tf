@@ -45,3 +45,27 @@ variable "allow_admin_create_user_only" {
   type        = bool
   default     = false
 }
+
+variable "environment" {
+  description = "Environment name (dev/staging/prod)"
+  type        = string
+  default     = "production"
+}
+
+variable "owner" {
+  description = "Resource owner/team"
+  type        = string
+  default     = "DevOps"
+}
+
+variable "cost_center" {
+  description = "Cost center for billing allocation"
+  type        = string
+  default     = "engineering"
+}
+
+variable "additional_tags" {
+  description = "Additional tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}

@@ -16,7 +16,8 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   })
 
   tags = {
-    Name = "${var.app_name}-ecs-task-execution-role"
+    Name        = "${var.app_name}-ecs-task-execution-role"
+    Description = "Execution role for ECS tasks - allows ECR pulls and CloudWatch logs"
   }
 }
 
@@ -44,7 +45,8 @@ resource "aws_iam_policy" "ecs_task_execution_logs" {
   })
 
   tags = {
-    Name = "${var.app_name}-ecs-task-execution-logs"
+    Name        = "${var.app_name}-ecs-task-execution-logs"
+    Description = "Allows ECS tasks to create CloudWatch log groups"
   }
 }
 
@@ -71,7 +73,8 @@ resource "aws_iam_role" "ecs_task_role" {
   })
 
   tags = {
-    Name = "${var.app_name}-ecs-task-role"
+    Name        = "${var.app_name}-ecs-task-role"
+    Description = "Task role for ECS application containers - allows access to DynamoDB and S3"
   }
 }
 
@@ -99,7 +102,8 @@ resource "aws_iam_policy" "dynamodb_access" {
   })
 
   tags = {
-    Name = "${var.app_name}-dynamodb-access"
+    Name        = "${var.app_name}-dynamodb-access"
+    Description = "Allows ECS tasks to perform CRUD operations on DynamoDB table"
   }
 }
 
@@ -133,7 +137,8 @@ resource "aws_iam_policy" "s3_file_access" {
   })
 
   tags = {
-    Name = "${var.app_name}-s3-file-access"
+    Name        = "${var.app_name}-s3-file-access"
+    Description = "Allows ECS tasks to read/write files to S3 uploads bucket"
   }
 }
 
