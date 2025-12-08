@@ -65,6 +65,14 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "AWS_REGION"
           value = var.aws_region
+        },
+        {
+          name  = "S3_BUCKET_NAME"
+          value = aws_s3_bucket.file_uploads.id
+        },
+        {
+          name  = "MAX_FILE_SIZE_MB"
+          value = "40"
         }
       ]
       logConfiguration = {

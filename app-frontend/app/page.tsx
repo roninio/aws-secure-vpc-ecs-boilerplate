@@ -1,6 +1,7 @@
 import LogoutButton from './components/LogoutButton';
 import UserInfo from './components/UserInfo';
 import TextSaver from './components/TextSaver';
+import FileUploader from './components/FileUploader';
 
 export default function Home() {
   return (
@@ -63,6 +64,10 @@ export default function Home() {
             ✅ Load balanced via ALB
           </p>
         </div>
+      </div>
+
+      <div style={{ marginTop: '40px' }}>
+        <FileUploader />
       </div>
     </main>
   )

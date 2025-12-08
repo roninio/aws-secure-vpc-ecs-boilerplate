@@ -104,8 +104,15 @@ Internet
 *   **Amazon DynamoDB**: Serverless NoSQL database
     *   ✅ Pay-per-request billing mode
     *   ✅ Hash key: `id` (String)
-    *   ✅ Integrated with backend service via environment variables
     *   ✅ Stores user-submitted text with timestamps
+    *   ✅ Stores file metadata (file_id, user_id, filename, size, s3_key)
+*   **Amazon S3**: Serverless file storage
+    *   ✅ Private bucket with Block Public Access enabled
+    *   ✅ User-scoped file organization: `users/{user_id}/{file_id}`
+    *   ✅ Versioning enabled for data protection
+    *   ✅ File size limit: 40MB per file
+    *   ✅ Access via presigned URLs (1-hour expiration)
+    *   ✅ Only authenticated users can upload/download their own files
 
 ### **IAM & Security** ✅ DEPLOYED
 *   ✅ **ECS Task Execution Role**: Allows ECS to pull images and write logs
@@ -129,6 +136,9 @@ Internet
 *   ✅ Features:
     *   User info display (email, sub, token expiration)
     *   Text saver component with DynamoDB integration
+    *   File uploader component with drag-and-drop support
+    *   File download via secure presigned URLs
+    *   File management (list, delete own files)
     *   Logout functionality
     *   Responsive UI with gradient styling
 
@@ -141,6 +151,10 @@ Internet
     *   `GET /health` - Health check
     *   `POST /save` - Save text to DynamoDB
     *   `GET /items` - Retrieve all items from DynamoDB
+    *   `POST /upload` - Upload file to S3 (requires authentication)
+    *   `GET /download/{file_id}` - Generate presigned download URL (user must own file)
+    *   `GET /files` - List authenticated user's files
+    *   `DELETE /files/{file_id}` - Delete file (user must own file)
 *   ✅ Structured logging with Python logging module
 
 ### Infrastructure ✅ DEPLOYED
@@ -281,6 +295,189 @@ terraform apply
 ```
 
 The deployment typically takes **5-10 minutes** to complete.
+
+## File Storage with S3 ✅ IMPLEMENTED
+
+### Overview
+
+The application now includes secure file storage using Amazon S3. Files are organized by user, access-controlled at the application level, and shared via time-limited presigned URLs.
+
+**Key Features:**
+- 🔒 **Private S3 Bucket**: All files stored privately; Block Public Access enabled
+- 👤 **User-Scoped Storage**: Each user can only access their own files (`users/{user_id}/{file_id}`)
+- 📏 **File Size Limit**: 40MB maximum per file
+- 🔐 **Secure Download URLs**: Presigned URLs with 1-hour expiration
+- 📝 **File Metadata**: Stored in DynamoDB for fast queries
+- 🗑️ **User Management**: Upload, download, list, and delete own files
+
+### How It Works
+
+1. **Upload**: User selects file via FileUploader component
+2. **Backend Processing**:
+   - Validates file size (≤ 40MB)
+   - Extracts user ID from ALB OIDC headers
+   - Stores file in S3 at `users/{user_id}/{file_id}/filename`
+   - Saves file metadata in DynamoDB
+3. **Download**: User requests file → Backend verifies ownership → Generates presigned URL (1-hour validity)
+4. **Access Control**: Each request validates user ownership via DynamoDB metadata
+
+### Architecture
+
+```
+Frontend (FileUploader Component)
+    ↓
+Next.js API Routes (/api/upload, /api/files, /api/files/[fileId])
+    ↓ (forwards auth headers from ALB)
+Backend Service (FastAPI)
+    ↓
+    ├→ S3 Bucket (file storage, organized by user)
+    └→ DynamoDB (file metadata, ownership tracking)
+```
+
+### Frontend Integration
+
+The `FileUploader` component is available on the main dashboard:
+
+```typescript
+// File operations
+POST /api/upload          // Upload file
+GET  /api/files           // List user's files
+GET  /api/files/{fileId}  // Get download presigned URL
+DELETE /api/files/{fileId} // Delete file
+```
+
+**Usage in React:**
+```tsx
+import FileUploader from './components/FileUploader';
+
+export default function Page() {
+  return <FileUploader />;
+}
+```
+
+### Backend Endpoints
+
+#### POST /upload
+Upload a file to S3
+```bash
+curl -X POST http://localhost:3000/upload \
+  -H "x-amzn-oidc-identity: user-123" \
+  -F "file=@document.pdf"
+```
+
+Response:
+```json
+{
+  "file_id": "550e8400-e29b-41d4-a716-446655440000",
+  "filename": "document.pdf",
+  "size": 1024000,
+  "uploaded_at": "2025-12-08T10:30:00",
+  "message": "File uploaded successfully"
+}
+```
+
+#### GET /files
+List all files uploaded by the authenticated user
+```bash
+curl -X GET http://localhost:3000/files \
+  -H "x-amzn-oidc-identity: user-123"
+```
+
+Response:
+```json
+{
+  "files": [
+    {
+      "file_id": "550e8400-e29b-41d4-a716-446655440000",
+      "filename": "document.pdf",
+      "size": 1024000,
+      "uploaded_at": "2025-12-08T10:30:00"
+    }
+  ]
+}
+```
+
+#### GET /download/{file_id}
+Generate a presigned URL for downloading a file
+```bash
+curl -X GET http://localhost:3000/download/550e8400-e29b-41d4-a716-446655440000 \
+  -H "x-amzn-oidc-identity: user-123"
+```
+
+Response:
+```json
+{
+  "file_id": "550e8400-e29b-41d4-a716-446655440000",
+  "filename": "document.pdf",
+  "download_url": "https://my-app-file-uploads-123.s3.us-east-1.amazonaws.com/users/user-123/550e8400/document.pdf?AWSAccessKeyId=...",
+  "expires_in_seconds": 3600
+}
+```
+
+#### DELETE /files/{file_id}
+Delete a file (user must own the file)
+```bash
+curl -X DELETE http://localhost:3000/files/550e8400-e29b-41d4-a716-446655440000 \
+  -H "x-amzn-oidc-identity: user-123"
+```
+
+Response:
+```json
+{
+  "message": "File deleted successfully"
+}
+```
+
+### S3 Bucket Configuration
+
+The S3 bucket is created with production-ready security settings:
+
+- **Block Public Access**: All 4 settings enabled
+- **Versioning**: Enabled for data protection and recovery
+- **Encryption**: AES-256 at rest (default)
+- **Lifecycle Policies**:
+  - Delete old versions after 90 days
+  - Abort incomplete multipart uploads after 7 days
+- **Bucket Policy**: Only backend ECS task role can access files
+
+### Accessing the Bucket
+
+View bucket details:
+```bash
+terraform output s3_file_uploads_bucket
+```
+
+Example output:
+```
+my-secure-app-file-uploads-123456789012
+```
+
+### Local Development
+
+For local testing, you'll need AWS credentials configured:
+
+```bash
+# Backend (requires AWS_REGION and S3_BUCKET_NAME env vars)
+export AWS_REGION="us-east-1"
+export S3_BUCKET_NAME="my-secure-app-file-uploads-123456789012"
+export TABLE_NAME="my-secure-app-table"
+uvicorn main:app --reload --port 3000
+```
+
+The backend will authenticate S3 requests using your local AWS credentials.
+
+### Cost Considerations
+
+**Estimated Monthly Cost (40MB-1GB usage)**:
+- S3 Storage: ~$0.023 per month
+- S3 PUT/GET requests: ~$1-5 (pay-per-request)
+- Data transfer: Minimal if within VPC
+
+**Cost Optimization Tips**:
+- Implement object expiration policies for temporary uploads
+- Use VPC Gateway endpoint for S3 to save NAT Gateway data transfer costs
+- Enable S3 Intelligent-Tiering for infrequently accessed files
+- Archive old files to S3 Glacier
 
 ## Accessing the Application
 
@@ -520,7 +717,10 @@ aws-terra/
 ├── app-frontend/                # Next.js 14 frontend (ALB-authenticated) ✅
 │   ├── app/                    # Next.js app directory
 │   │   ├── api/                # API routes
-│   │   ├── components/         # React components (UserInfo, TextSaver, LogoutButton)
+│   │   │   ├── upload/         # POST /api/upload (file upload proxy)
+│   │   │   ├── files/          # GET /api/files (list user files)
+│   │   │   └── files/[fileId]/ # GET/DELETE /api/files/{fileId}
+│   │   ├── components/         # React components (UserInfo, TextSaver, FileUploader, LogoutButton)
 │   │   ├── logout-success/     # Logout success page
 │   │   ├── layout.tsx          # Root layout
 │   │   └── page.tsx            # Home page
@@ -546,6 +746,7 @@ aws-terra/
 ├── iam.tf                      # IAM roles and policies ✅
 ├── outputs.tf                  # Terraform output values ✅
 ├── provider.tf                 # AWS provider configuration ✅
+├── s3.tf                       # S3 bucket for file storage ✅
 ├── security_groups.tf          # Security group rules ✅
 ├── service_discovery.tf        # AWS Cloud Map configuration ✅
 ├── variables.tf                # Input variables ✅
@@ -587,9 +788,10 @@ This Terraform configuration creates the following AWS resources:
 | Cognito User Pool Client | 1 | OAuth application (ALB-integrated) |
 | Cognito Domain | 1 | Hosted UI domain |
 | DynamoDB Table | 1 | Application data storage |
+| S3 Bucket | 1 | User file storage (private, user-scoped) |
 | CloudWatch Log Groups | 2 | ECS task logs |
 
-**Total**: ~32-36 resources
+**Total**: ~33-37 resources
 
 ## Updating the Infrastructure
 
@@ -781,6 +983,21 @@ A: ✅ All core features are operational:
 **Q: Can I use a different authentication provider?**
 A: Yes, ALB supports OIDC-compliant identity providers. Update the listener action in `alb.tf` to use `authenticate-oidc` instead of `authenticate-cognito`.
 
+**Q: How do I access uploaded files?**
+A: ✅ Users upload files via the FileUploader component. The backend stores files in S3 (organized by user ID) and returns presigned URLs. Users can download their files via secure presigned URLs that expire after 1 hour. Each file request validates user ownership via metadata stored in DynamoDB.
+
+**Q: What is the file size limit?**
+A: ✅ The default limit is 40MB per file. This is set in the `MAX_FILE_SIZE_MB` environment variable in the backend task definition (`ecs.tf`). Adjust the value and redeploy if needed.
+
+**Q: Can users share files with other users?**
+A: ✅ Currently, the system enforces user-scoped file access (users can only access their own files). To add file sharing, you would need to create a separate permissions table in DynamoDB and update the backend authorization logic.
+
+**Q: What happens to deleted files in S3?**
+A: ✅ When a user deletes a file, the backend removes the S3 object and deletes the metadata from DynamoDB. S3 versioning is enabled, so deleted versions are retained for 90 days before auto-deletion (per the lifecycle policy). This allows recovery of accidentally deleted files if needed.
+
+**Q: How are presigned URLs generated and secured?**
+A: ✅ Presigned URLs are generated by the backend using AWS SDK (`boto3`). Each URL includes a cryptographic signature and is valid for 1 hour. The URL is user-specific (via AWS credentials) and includes the S3 key and required permissions. Expiration prevents unauthorized access after the time window closes.
+
 ## Contributing
 
 Contributions are welcome! Please follow these guidelines:
@@ -852,18 +1069,20 @@ For issues and questions:
 3. **Compute**: ECS Fargate cluster with 2 services (app frontend + backend)
 4. **Authentication**: Cognito User Pool with hosted UI
 5. **Storage**: DynamoDB table with pay-per-request billing
-6. **Networking**: Service discovery via AWS Cloud Map
-7. **Security**: Security groups, IAM roles, private subnets
-8. **Monitoring**: CloudWatch logs with 7-day retention
-9. **Container Registry**: ECR repositories for both services
+6. **File Storage**: S3 bucket with user-scoped access and presigned URLs ✅
+7. **Networking**: Service discovery via AWS Cloud Map
+8. **Security**: Security groups, IAM roles, private subnets
+9. **Monitoring**: CloudWatch logs with 7-day retention
+10. **Container Registry**: ECR repositories for both services
 
 ### ✅ Working Features
 1. **User Authentication**: Sign up, sign in, email verification
 2. **User Info Display**: Email, sub, token expiration
 3. **Text Saver**: Save and retrieve text from DynamoDB
-4. **Logout**: Proper session cleanup and redirect
-5. **Backend API**: Health check, save, and retrieve endpoints
-6. **Internal Communication**: Frontend → Backend via service discovery
+4. **File Storage**: Upload, download (presigned URLs), list, delete files ✅
+5. **Logout**: Proper session cleanup and redirect
+6. **Backend API**: Health check, save, retrieve, and file endpoints
+7. **Internal Communication**: Frontend → Backend via service discovery
 
 ### 🚧 Known Limitations
 1. **Self-signed Certificate**: Browser warnings expected (use custom domain for production)

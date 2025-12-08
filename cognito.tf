@@ -87,7 +87,7 @@ resource "random_string" "suffix" {
 }
 
 resource "aws_cognito_user_pool_ui_customization" "ui" {
-  client_id = aws_cognito_user_pool_client.client.id
+  client_id    = aws_cognito_user_pool_client.client.id
   user_pool_id = aws_cognito_user_pool.main.id
 
   css = <<EOF

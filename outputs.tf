@@ -73,3 +73,14 @@ output "appregistry_application_arn" {
   description = "AppRegistry Application ARN"
   value       = aws_servicecatalogappregistry_application.main.arn
 }
+
+output "s3_file_uploads_bucket" {
+  description = "S3 bucket for file uploads"
+  value       = aws_s3_bucket.file_uploads.id
+}
+
+output "s3_bucket_region" {
+  description = "AWS region for S3 bucket"
+  value       = aws_s3_bucket.file_uploads.region
+}
+

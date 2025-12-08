@@ -107,3 +107,37 @@ resource "aws_iam_role_policy_attachment" "ecs_task_role_dynamodb" {
   role       = aws_iam_role.ecs_task_role.name
   policy_arn = aws_iam_policy.dynamodb_access.arn
 }
+
+# Policy to access S3 bucket for file uploads
+resource "aws_iam_policy" "s3_file_access" {
+  name        = "${var.app_name}-s3-file-access"
+  description = "Allow access to S3 file uploads bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:s3:::${var.app_name}-file-uploads-*",
+          "arn:aws:s3:::${var.app_name}-file-uploads-*/users/*"
+        ]
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.app_name}-s3-file-access"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_role_s3" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.s3_file_access.arn
+}
