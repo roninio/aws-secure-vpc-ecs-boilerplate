@@ -580,6 +580,37 @@ Convenience scripts for quick deployment:
 ./test-logout.sh
 ```
 
+## Makefile Commands ✅ AVAILABLE
+
+A Makefile is provided for streamlined infrastructure and application management:
+
+```bash
+# Infrastructure commands
+make init          # Initialize Terraform
+make plan          # Preview infrastructure changes
+make apply         # Deploy infrastructure
+make destroy       # Destroy all infrastructure
+make output        # Show Terraform outputs
+
+# Application deployment
+make deploy-frontend    # Build and push frontend image
+make deploy-backend     # Build and push backend image
+make deploy-all         # Deploy both frontend and backend
+
+# Service management
+make restart-frontend   # Force new deployment of frontend
+make restart-backend    # Force new deployment of backend
+make logs-frontend      # Tail frontend CloudWatch logs
+make logs-backend       # Tail backend CloudWatch logs
+
+# Cleanup
+make clean         # Clean Terraform files
+make clean-ecr     # Delete ECR repositories
+
+# Help
+make help          # Show all available commands
+```
+
 ## Monitoring and Troubleshooting
 
 ### View ECS Service Status
@@ -714,6 +745,7 @@ aws ecr delete-repository --repository-name my-app-backend --force
 
 ```
 aws-terra/
+├── Makefile                    # Automation commands for deployment ✅
 ├── app-frontend/                # Next.js 14 frontend (ALB-authenticated) ✅
 │   ├── app/                    # Next.js app directory
 │   │   ├── api/                # API routes
