@@ -30,3 +30,4 @@ terraform.rc
 
 # User credentials
 .env.users
+.vscode/
