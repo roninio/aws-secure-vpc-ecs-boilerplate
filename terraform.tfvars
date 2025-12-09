@@ -1,8 +1,7 @@
 aws_region            = "us-east-1"
-app_name              = "my-secure-app"
-app_frontend_image    = "884337373788.dkr.ecr.us-east-1.amazonaws.com/my-app-app-frontend:latest"
-backend_image         = "884337373788.dkr.ecr.us-east-1.amazonaws.com/my-app-backend:latest"
-cognito_domain_prefix = "my-secure-app-auth-123" # Must be unique across AWS
+aws_account_id        = "884337373788"
+app_name              = "my-secure-4"
+cognito_domain_prefix = "my-secure-app4-auth-123" # Must be unique across AWS
 allow_admin_create_user_only = true # Disable self-registration, only admins can create users
 environment           = "production"
 owner                 = "DevOps"

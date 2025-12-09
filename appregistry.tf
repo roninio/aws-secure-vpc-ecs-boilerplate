@@ -68,7 +68,6 @@ resource "null_resource" "tag_resources_for_appregistry" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      set -e
       REGION="${var.aws_region}"
       APP_NAME="${var.app_name}"
       
@@ -77,55 +76,58 @@ resource "null_resource" "tag_resources_for_appregistry" {
         --application "$APP_NAME" \
         --region "$REGION" \
         --query 'applicationTag.awsApplication' \
-        --output text)
+        --output text 2>/dev/null || echo "")
+      
+      if [ -z "$APP_ARN" ]; then
+        echo "Warning: Could not retrieve AppRegistry application ARN"
+        exit 0
+      fi
       
       echo "AppRegistry Application ARN: $APP_ARN"
       
-      # Tag ECS Services
+      # Tag ECS Services (only if they exist)
       aws ecs tag-resource \
         --resource-arn "arn:aws:ecs:$REGION:${data.aws_caller_identity.current.account_id}:service/my-secure-app-cluster/my-secure-app-backend-service" \
         --tags key=awsApplication,value="$APP_ARN" \
-        --region "$REGION" || echo "Warning: Could not tag backend service"
+        --region "$REGION" 2>/dev/null || echo "Warning: Could not tag backend service"
       
       aws ecs tag-resource \
         --resource-arn "arn:aws:ecs:$REGION:${data.aws_caller_identity.current.account_id}:service/my-secure-app-cluster/my-secure-app-app-frontend-service" \
         --tags key=awsApplication,value="$APP_ARN" \
-        --region "$REGION" || echo "Warning: Could not tag app-frontend service"
+        --region "$REGION" 2>/dev/null || echo "Warning: Could not tag app-frontend service"
       
-      # Tag ECS Cluster
+      # Tag ECS Cluster (only if it exists)
       aws ecs tag-resource \
         --resource-arn "arn:aws:ecs:$REGION:${data.aws_caller_identity.current.account_id}:cluster/my-secure-app-cluster" \
         --tags key=awsApplication,value="$APP_ARN" \
-        --region "$REGION" || echo "Warning: Could not tag ECS cluster"
+        --region "$REGION" 2>/dev/null || echo "Warning: Could not tag ECS cluster"
       
-      # Tag S3 Bucket - need to preserve existing tags
+      # Tag S3 Bucket (only if it exists)
       BUCKET_NAME="my-secure-app-file-uploads-${data.aws_caller_identity.current.account_id}"
-      
-      # Get existing tags and add awsApplication tag
       aws s3api get-bucket-tagging --bucket "$BUCKET_NAME" --region "$REGION" 2>/dev/null | \
         jq ".TagSet += [{Key:\"awsApplication\",Value:\"$APP_ARN\"}]" | \
         jq -r '.TagSet | map("Key=\(.Key),Value=\(.Value)") | join(" ")' | \
         xargs -I {} aws s3api put-bucket-tagging --bucket "$BUCKET_NAME" --tagging "TagSet=[{}]" --region "$REGION" 2>/dev/null || \
         echo "Warning: Could not tag S3 bucket"
       
-      # Tag DynamoDB Table
+      # Tag DynamoDB Table (only if it exists)
       aws dynamodb tag-resource \
         --resource-arn "arn:aws:dynamodb:$REGION:${data.aws_caller_identity.current.account_id}:table/my-secure-app-table" \
         --tags Key=awsApplication,Value="$APP_ARN" \
-        --region "$REGION" || echo "Warning: Could not tag DynamoDB table"
+        --region "$REGION" 2>/dev/null || echo "Warning: Could not tag DynamoDB table"
       
-      # Tag ALB
-      ALB_ARN=$(aws elbv2 describe-load-balancers --names "my-secure-app-alb" --region "$REGION" --query "LoadBalancers[0].LoadBalancerArn" --output text 2>/dev/null)
+      # Tag ALB (only if it exists)
+      ALB_ARN=$(aws elbv2 describe-load-balancers --names "my-secure-app-alb" --region "$REGION" --query "LoadBalancers[0].LoadBalancerArn" --output text 2>/dev/null || echo "")
       if [ ! -z "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
-        aws elbv2 add-tags --resource-arns "$ALB_ARN" --tags Key=awsApplication,Value="$APP_ARN" --region "$REGION" || echo "Warning: Could not tag ALB"
+        aws elbv2 add-tags --resource-arns "$ALB_ARN" --tags Key=awsApplication,Value="$APP_ARN" --region "$REGION" 2>/dev/null || echo "Warning: Could not tag ALB"
       else
         echo "Warning: Could not find ALB"
       fi
       
-      # Tag Security Group - find it dynamically
-      SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=my-secure-app-alb-sg" --region "$REGION" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null)
+      # Tag Security Group (only if it exists)
+      SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=my-secure-app-alb-sg" --region "$REGION" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null || echo "")
       if [ ! -z "$SG_ID" ] && [ "$SG_ID" != "None" ]; then
-        aws ec2 create-tags --resources "$SG_ID" --tags "Key=awsApplication,Value=$APP_ARN" --region "$REGION" || echo "Warning: Could not tag security group"
+        aws ec2 create-tags --resources "$SG_ID" --tags "Key=awsApplication,Value=$APP_ARN" --region "$REGION" 2>/dev/null || echo "Warning: Could not tag security group"
       else
         echo "Warning: Could not find security group"
       fi

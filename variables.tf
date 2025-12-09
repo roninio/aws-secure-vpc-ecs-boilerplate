@@ -12,8 +12,8 @@ variable "app_name" {
 
 
 
-variable "backend_image" {
-  description = "ECR URI for the backend image"
+variable "aws_account_id" {
+  description = "AWS Account ID for ECR"
   type        = string
 }
 
@@ -22,10 +22,9 @@ variable "cognito_domain_prefix" {
   type        = string
 }
 
-variable "app_frontend_image" {
-  description = "ECR URI for the app frontend image (Next.js)"
-  type        = string
-  default     = "884337373788.dkr.ecr.us-east-1.amazonaws.com/my-app-app-frontend:latest"
+locals {
+  app_frontend_image = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.app_name}-app-frontend:latest"
+  backend_image      = "${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.app_name}-backend:latest"
 }
 
 variable "additional_callback_urls" {

@@ -1,8 +1,8 @@
 .PHONY: all init plan apply deploy-images deploy-frontend deploy-backend deployall test destroy clean
 
-all: deploy-images apply
+all: apply deploy-images
 
-deployall: deploy-images apply test
+deployall: apply deploy-images test
 
 init:
 	terraform init

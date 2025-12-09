@@ -1,6 +1,7 @@
 # S3 Bucket for file storage
 resource "aws_s3_bucket" "file_uploads" {
-  bucket = "${var.app_name}-file-uploads-${data.aws_caller_identity.current.account_id}"
+  bucket        = "${var.app_name}-file-uploads-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
 
   tags = merge(
     local.common_tags,

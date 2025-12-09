@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-AWS_REGION="us-east-1"
+# Get app_name from terraform.tfvars
+APP_NAME=$(grep '^app_name' terraform.tfvars | cut -d'=' -f2 | tr -d ' "')
+AWS_REGION=$(grep '^aws_region' terraform.tfvars | cut -d'=' -f2 | tr -d ' "' || echo "us-east-1")
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 IMAGE_NAME="my-app-backend"
 ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}:latest"
@@ -21,8 +23,8 @@ docker push ${ECR_URI}
 
 echo "Forcing ECS deployment..."
 aws ecs update-service \
-  --cluster my-secure-app-cluster \
-  --service my-secure-app-backend-service \
+  --cluster ${APP_NAME}-cluster \
+  --service ${APP_NAME}-backend-service \
   --force-new-deployment \
   --region ${AWS_REGION} \
   --no-cli-pager
