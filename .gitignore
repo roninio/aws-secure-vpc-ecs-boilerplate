@@ -27,3 +27,6 @@ override.tf.json
 # Terraform CLI configuration files
 .terraformrc
 terraform.rc
+
+# User credentials
+.env.users
