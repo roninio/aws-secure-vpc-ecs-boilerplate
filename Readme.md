@@ -7,6 +7,7 @@
 
 Production-ready Terraform boilerplate for deploying containerized applications on AWS with secure networking, authentication, and data storage. Includes working Next.js frontend and FastAPI backend for fast testing.
 
+![alt text](infographic-1.jpg)
 ## What's Included
 
 **AWS Services:**
@@ -42,7 +43,7 @@ Internet → ALB (HTTPS + Cognito Auth) → Frontend (Next.js) → Backend (Fast
 
 **Infrastructure (~35 AWS resources):**
 - VPC: 2 public + 2 private subnets across 2 AZs
-- ECS Fargate: Frontend (0.5 vCPU/1GB) + Backend (0.25 vCPU/0.5GB)
+- ECS Fargate: Frontend (512 CPU/1024MB) + Backend (256 CPU/512MB)
 - ALB with self-signed SSL certificate
 - Cognito User Pool with hosted UI
 - DynamoDB (pay-per-request)
@@ -96,6 +97,7 @@ terraform output alb_dns_name
 | :--- | :--- | :---: |
 | `aws_region` | AWS Region | No (default: us-east-1) |
 | `app_name` | Resource name prefix | No (default: my-secure-app) |
+| `aws_account_id` | AWS Account ID for ECR | **Yes** |
 | `cognito_domain_prefix` | Cognito hosted UI domain prefix - | **Yes** |
 
 **Note:** Cognito domain prefix must be globally unique. A random suffix is auto-appended.
@@ -152,9 +154,8 @@ uvicorn main:app --reload --port 3000
 ```bash
 make init              # Initialize Terraform
 make apply             # Deploy infrastructure
-make deploy-all        # Build and push both containers
-make logs-frontend     # View frontend logs
-make logs-backend      # View backend logs
+make deploy-images     # Build and push both containers
+make deployall         # Deploy infrastructure + images + test
 make destroy           # Destroy all resources
 ```
 
