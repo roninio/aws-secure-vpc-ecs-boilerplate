@@ -7,7 +7,7 @@
 
 Production-ready Terraform boilerplate for deploying containerized applications on AWS with secure networking, authentication, and data storage. Includes working Next.js frontend and FastAPI backend for fast testing.
 
-![alt text](infographic-1.jpg)
+![alt text](infographic.jpg)
 ## What's Included
 
 **AWS Services:**
