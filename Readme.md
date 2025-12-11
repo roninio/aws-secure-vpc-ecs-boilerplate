@@ -1,1142 +1,270 @@
-# Secure Web Application on AWS with Terraform
+# AWS Secure VPC + ECS Boilerplate
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.0+-623CE4?logo=terraform)](https://www.terraform.io/)
 [![AWS](https://img.shields.io/badge/AWS-ECS%20%7C%20Fargate-FF9900?logo=amazon-aws)](https://aws.amazon.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 
-✅ **FULLY DEPLOYED & OPERATIONAL**
+Production-ready Terraform boilerplate for deploying containerized applications on AWS with secure networking, authentication, and data storage. Includes working Next.js frontend and FastAPI backend for fast testing.
 
-This repository contains Terraform infrastructure-as-code to deploy a secure, scalable web application on Amazon Web Services (AWS) using Amazon ECS (Fargate), AWS Cognito for authentication, and an Application Load Balancer (ALB) with HTTPS support.
+## What's Included
 
-## Table of Contents
+**AWS Services:**
+- VPC with public/private subnets across 2 AZs
+- ECS Fargate (serverless containers)
+- Application Load Balancer with HTTPS
+- Cognito authentication (OAuth 2.0)
+- DynamoDB (NoSQL database)
+- S3 (file storage with presigned URLs)
+- CloudWatch Logs
+- Service Discovery (AWS Cloud Map)
 
-- [Architecture Overview](#architecture-overview)
-- [Technology Stack](#technology-stack)
-- [Prerequisites](#prerequisites)
-- [Configuration](#configuration)
-- [Deployment Steps](#deployment-steps)
-- [Accessing the Application](#accessing-the-application)
-- [Local Development](#local-development)
-- [Monitoring and Troubleshooting](#monitoring-and-troubleshooting)
-- [Security Considerations](#security-considerations)
-- [Cost Optimization](#cost-optimization)
-- [Cleanup](#cleanup)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-- [License](#license)
+**Sample Applications:**
+- Next.js 14 frontend (TypeScript, React 18)
+- FastAPI backend (Python, async)
+- User authentication flow
+- CRUD operations with DynamoDB
+- File upload/download with S3
 
-## Architecture Overview
-
-The infrastructure deploys a modern, production-ready web application with the following components:
-
-### **Architecture Flow**
+## Architecture
 
 ```
-Internet
-   │
-   ▼
-[Application Load Balancer (ALB)]
-   │ HTTPS (443) + Cognito Auth
-   ▼
-[AWS Cognito] ◄──────────────────┐
-   │ (Authentication)              │
-   │                               │
-   ▼ (Authenticated)               │
-[App Frontend Service] ──► [Backend Service] ──► [DynamoDB]
-   (Private Subnet)         (Private Subnet)
+Internet → ALB (HTTPS + Cognito Auth) → Frontend (Next.js) → Backend (FastAPI) → DynamoDB/S3
+                                           ↓ Private Subnets ↓
 ```
 
-**Key Security Features:**
-1. **ALB-Based Authentication** - Cognito authentication handled at ALB layer before routing
-2. **App Frontend Service** - Receives authenticated requests with user info in headers
-3. **Backend Service** - Completely isolated within VPC
-4. **No Separate Login Service** - Authentication managed by ALB, simplifying architecture
-5. All services deployed in private subnets with NAT Gateway for outbound access
+**Security:**
+- ALB handles authentication (Cognito OAuth 2.0)
+- All containers in private subnets
+- User info passed via HTTP headers
+- Service-to-service communication via AWS Cloud Map
+- IAM roles with least privilege
 
-### **Compute Layer (ECS Fargate)** ✅ DEPLOYED
-*   **App Frontend Service**: Main application frontend (Next.js 14)
-    *   ✅ Runs on Fargate with 512 CPU / 1024 MB memory
-    *   ✅ Deployed in private subnets behind ALB
-    *   ✅ Receives authenticated requests with user info in HTTP headers
-    *   ✅ Headers: `x-amzn-oidc-data`, `x-amzn-oidc-identity`, `x-amzn-oidc-accesstoken`
-    *   ✅ Accessible via ALB on port 3000 (container)
-    *   ✅ Features: User info display, text saver with DynamoDB integration, logout functionality
-*   **Backend Service**: FastAPI backend service
-    *   ✅ Runs on Fargate with 256 CPU / 512 MB memory
-    *   ✅ Deployed in private subnets (no internet exposure)
-    *   ✅ Connected to DynamoDB for data persistence
-    *   ✅ Accessible only within the VPC via service discovery (backend.my-secure-app.local)
-    *   ✅ Endpoints: `/health`, `/save` (POST), `/items` (GET)
+**Infrastructure (~35 AWS resources):**
+- VPC: 2 public + 2 private subnets across 2 AZs
+- ECS Fargate: Frontend (0.5 vCPU/1GB) + Backend (0.25 vCPU/0.5GB)
+- ALB with self-signed SSL certificate
+- Cognito User Pool with hosted UI
+- DynamoDB (pay-per-request)
+- S3 with versioning and presigned URLs
+- CloudWatch Logs (7-day retention)
 
-### **Load Balancing & SSL/TLS** ✅ DEPLOYED
-*   **Application Load Balancer (ALB)**: Public-facing load balancer with integrated authentication
-    *   ✅ HTTP (port 80) → Redirects to HTTPS (301)
-    *   ✅ HTTPS (port 443) → Authenticates with Cognito → Forwards to app frontend
-    *   ✅ Self-signed SSL certificate via AWS Certificate Manager (ACM)
-    *   ✅ Deployed across multiple availability zones
-    *   ✅ **Security**: Authentication at ALB layer before application access
+## Quick Start
 
-### **Authentication & Authorization** ✅ DEPLOYED
-*   **AWS Cognito User Pool**: Managed user authentication integrated with ALB
-    *   ✅ Email-based user registration and login
-    *   ✅ Password policy enforcement (8+ chars, uppercase, lowercase, numbers, symbols)
-    *   ✅ Customized hosted UI with branded styling
-    *   ✅ OAuth 2.0 authorization code flow with client secret (ALB-managed)
-    *   ✅ Callback URL: `/oauth2/idpresponse` (ALB endpoint)
-    *   ✅ ALB validates tokens and passes user info to application via headers
-    *   ✅ Logout functionality with proper session cleanup
+### Prerequisites
+- AWS Account with admin permissions
+- Terraform 1.0+
+- AWS CLI configured (`aws configure`)
+- Docker
+- Node.js 18+ (for local dev)
+- Python 3.9+ (for local dev)
 
-### **Networking** ✅ DEPLOYED
-*   **VPC**: Custom VPC (10.0.0.0/16) with DNS support
-*   **Public Subnets** (2): Host ALB and NAT Gateway
-    *   ✅ CIDR: 10.0.0.0/24, 10.0.1.0/24
-*   **Private Subnets** (2): Host ECS tasks
-    *   ✅ CIDR: 10.0.10.0/24, 10.0.11.0/24
-*   **Internet Gateway**: Provides internet access for public subnets
-*   **NAT Gateway**: Enables outbound internet access for private subnets (container image pulls, updates)
-*   **Security Groups**: Fine-grained traffic control between ALB, ECS tasks, and services
-*   **Service Discovery**: AWS Cloud Map private DNS namespace (my-secure-app.local)
-    *   ✅ Enables internal service-to-service communication
-    *   ✅ Backend registered as: backend.my-secure-app.local
-
-### **Data Storage** ✅ DEPLOYED
-*   **Amazon DynamoDB**: Serverless NoSQL database
-    *   ✅ Pay-per-request billing mode
-    *   ✅ Hash key: `id` (String)
-    *   ✅ Stores user-submitted text with timestamps
-    *   ✅ Stores file metadata (file_id, user_id, filename, size, s3_key)
-*   **Amazon S3**: Serverless file storage
-    *   ✅ Private bucket with Block Public Access enabled
-    *   ✅ User-scoped file organization: `users/{user_id}/{file_id}`
-    *   ✅ Versioning enabled for data protection
-    *   ✅ File size limit: 40MB per file
-    *   ✅ Access via presigned URLs (1-hour expiration)
-    *   ✅ Only authenticated users can upload/download their own files
-
-### **IAM & Security** ✅ DEPLOYED
-*   ✅ **ECS Task Execution Role**: Allows ECS to pull images and write logs
-*   ✅ **ECS Task Role**: Grants application permissions (DynamoDB access)
-*   ✅ **Principle of Least Privilege**: Each service has minimal required permissions
-
-### **Logging & Monitoring** ✅ DEPLOYED
-*   **CloudWatch Logs**: Centralized logging for ECS tasks
-    *   ✅ App Frontend logs: `/ecs/${app_name}-app-frontend`
-    *   ✅ Backend logs: `/ecs/${app_name}-backend`
-    *   ✅ Auto-created log groups with 7-day retention
-    *   ✅ Stream prefixes for organized log viewing
-
-## Technology Stack
-
-### App Frontend Service ✅ IMPLEMENTED
-*   **Next.js 14** with App Router and TypeScript
-*   **React 18** with Server Components
-*   ✅ Receives authenticated user info from ALB in HTTP headers
-*   ✅ Communicates with backend via internal VPC networking
-*   ✅ Features:
-    *   User info display (email, sub, token expiration)
-    *   Text saver component with DynamoDB integration
-    *   File uploader component with drag-and-drop support
-    *   File download via secure presigned URLs
-    *   File management (list, delete own files)
-    *   Logout functionality
-    *   Responsive UI with gradient styling
-
-### Backend Service ✅ IMPLEMENTED
-*   **FastAPI** (Python 3.9+)
-*   **Boto3** AWS SDK for DynamoDB integration
-*   **Pydantic** for data validation
-*   ✅ CORS enabled for frontend communication
-*   ✅ Endpoints:
-    *   `GET /health` - Health check
-    *   `POST /save` - Save text to DynamoDB
-    *   `GET /items` - Retrieve all items from DynamoDB
-    *   `POST /upload` - Upload file to S3 (requires authentication)
-    *   `GET /download/{file_id}` - Generate presigned download URL (user must own file)
-    *   `GET /files` - List authenticated user's files
-    *   `DELETE /files/{file_id}` - Delete file (user must own file)
-*   ✅ Structured logging with Python logging module
-
-### Infrastructure ✅ DEPLOYED
-*   **Terraform** for infrastructure-as-code
-*   **AWS ECS Fargate** for serverless container orchestration
-*   **Amazon ECR** for container registry
-*   **AWS Cloud Map** for service discovery
-
-## Prerequisites
-
-Before deploying this infrastructure, ensure you have:
-
-*   **AWS Account**: Active AWS account with appropriate permissions
-*   **Terraform**: Version 1.0+ installed ([Download](https://www.terraform.io/downloads))
-*   **AWS CLI**: Installed and configured with credentials
-    ```bash
-    aws configure
-    ```
-*   **Docker**: For building and pushing container images
-*   **Node.js**: Version 18+ (for app frontend development)
-*   **Python**: Version 3.9+ (for backend development)
-
-## Configuration
-
-The deployment is customized using variables defined in `variables.tf`. Create a `terraform.tfvars` file to set these values:
-
-| Variable | Description | Default | Required |
-| :--- | :--- | :--- | :---: |
-| `aws_region` | AWS Region for deployment | `us-east-1` | No |
-| `app_name` | Name prefix for all resources | `my-secure-app` | No |
-| `app_frontend_image` | ECR URI for the app frontend Docker image | `884337373788.dkr.ecr.us-east-1.amazonaws.com/my-app-app-frontend:latest` | No |
-| `backend_image` | ECR URI for the backend Docker image | - | **Yes** |
-| `cognito_domain_prefix` | Unique prefix for Cognito hosted UI domain | - | **Yes** |
-| `additional_callback_urls` | Additional callback URLs for multiple environments | `[]` | No |
-| `additional_logout_urls` | Additional logout URLs for multiple environments | `[]` | No |
-| `allow_admin_create_user_only` | Only allow admins to create users | `false` | No |
-
-### Important Notes
-*   The `cognito_domain_prefix` must be globally unique across AWS
-*   A random 6-character suffix is automatically appended to ensure uniqueness
-*   App frontend image should expose port 3000
-*   Backend image should expose port 3000
-*   **Authentication**: ALB handles Cognito authentication; app receives user info in headers
-
-## Deployment Steps
-
-### Step 1: Create ECR Repositories ✅ COMPLETED
-
-ECR repositories are automatically created via Terraform (see `ecr.tf`):
+### Deploy (5 minutes)
 
 ```bash
-# Repositories created:
-# - my-app-app-frontend
-# - my-app-backend
+# 1. Clone and configure
+git clone <repo>
+cd aws-secure-vpc-ecs-boilerplate
 
-# To manually create if needed:
+# 2. Set AWS credentials
 export AWS_REGION="us-east-1"
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-aws ecr create-repository --repository-name my-app-app-frontend --region $AWS_REGION
-aws ecr create-repository --repository-name my-app-backend --region $AWS_REGION
-```
-
-### Step 2: Build and Push Docker Images ✅ COMPLETED
-
-Convenience scripts are provided for deployment:
-- `deploy-frontend.sh` - Builds and pushes app frontend image
-- `deploy-backend.sh` - Builds and pushes backend image
-
-#### Build App Frontend Image
-
-```bash
-cd app-frontend
-
-# Build the Docker image
-docker build -t my-app-app-frontend:latest .
-
-# Tag for ECR
-docker tag my-app-app-frontend:latest \
-  $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/my-app-app-frontend:latest
-
-# Login to ECR
-aws ecr get-login-password --region $AWS_REGION | \
-  docker login --username AWS --password-stdin \
-  $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-
-# Push to ECR
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/my-app-app-frontend:latest
-
-cd ..
-```
-
-#### Build Backend Image
-
-```bash
-cd backend
-
-# Build the Docker image
-docker build -t my-app-backend:latest .
-
-# Tag for ECR
-docker tag my-app-backend:latest \
-  $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/my-app-backend:latest
-
-# Push to ECR
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/my-app-backend:latest
-
-cd ..
-```
-
-### Step 3: Configure Terraform Variables
-
-Create a `terraform.tfvars` file in the root directory:
-
-```hcl
+# 3. Create terraform.tfvars
+cat > terraform.tfvars <<EOF
 aws_region            = "us-east-1"
-app_name              = "my-secure-app"
-app_frontend_image    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app-app-frontend:latest"
-backend_image         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app-backend:latest"
-cognito_domain_prefix = "my-secure-app-auth"
-```
+app_name              = "my-app"
+cognito_domain_prefix = "my-app-auth"
+EOF
 
-**Replace** `123456789012` with your actual AWS account ID.
-
-### Step 4: Deploy Infrastructure with Terraform
-
-```bash
-# Initialize Terraform (downloads providers and modules)
+# 4. Deploy infrastructure
 terraform init
-
-# Preview the changes
-terraform plan
-
-# Apply the configuration (creates all resources)
 terraform apply
 
-# Type 'yes' when prompted to confirm
-```
+# 5. Build and push containers
+./deploy-frontend.sh
+./deploy-backend.sh
 
-The deployment typically takes **5-10 minutes** to complete.
-
-## File Storage with S3 ✅ IMPLEMENTED
-
-### Overview
-
-The application now includes secure file storage using Amazon S3. Files are organized by user, access-controlled at the application level, and shared via time-limited presigned URLs.
-
-**Key Features:**
-- 🔒 **Private S3 Bucket**: All files stored privately; Block Public Access enabled
-- 👤 **User-Scoped Storage**: Each user can only access their own files (`users/{user_id}/{file_id}`)
-- 📏 **File Size Limit**: 40MB maximum per file
-- 🔐 **Secure Download URLs**: Presigned URLs with 1-hour expiration
-- 📝 **File Metadata**: Stored in DynamoDB for fast queries
-- 🗑️ **User Management**: Upload, download, list, and delete own files
-
-### How It Works
-
-1. **Upload**: User selects file via FileUploader component
-2. **Backend Processing**:
-   - Validates file size (≤ 40MB)
-   - Extracts user ID from ALB OIDC headers
-   - Stores file in S3 at `users/{user_id}/{file_id}/filename`
-   - Saves file metadata in DynamoDB
-3. **Download**: User requests file → Backend verifies ownership → Generates presigned URL (1-hour validity)
-4. **Access Control**: Each request validates user ownership via DynamoDB metadata
-
-### Architecture
-
-```
-Frontend (FileUploader Component)
-    ↓
-Next.js API Routes (/api/upload, /api/files, /api/files/[fileId])
-    ↓ (forwards auth headers from ALB)
-Backend Service (FastAPI)
-    ↓
-    ├→ S3 Bucket (file storage, organized by user)
-    └→ DynamoDB (file metadata, ownership tracking)
-```
-
-### Frontend Integration
-
-The `FileUploader` component is available on the main dashboard:
-
-```typescript
-// File operations
-POST /api/upload          // Upload file
-GET  /api/files           // List user's files
-GET  /api/files/{fileId}  // Get download presigned URL
-DELETE /api/files/{fileId} // Delete file
-```
-
-**Usage in React:**
-```tsx
-import FileUploader from './components/FileUploader';
-
-export default function Page() {
-  return <FileUploader />;
-}
-```
-
-### Backend Endpoints
-
-#### POST /upload
-Upload a file to S3
-```bash
-curl -X POST http://localhost:3000/upload \
-  -H "x-amzn-oidc-identity: user-123" \
-  -F "file=@document.pdf"
-```
-
-Response:
-```json
-{
-  "file_id": "550e8400-e29b-41d4-a716-446655440000",
-  "filename": "document.pdf",
-  "size": 1024000,
-  "uploaded_at": "2025-12-08T10:30:00",
-  "message": "File uploaded successfully"
-}
-```
-
-#### GET /files
-List all files uploaded by the authenticated user
-```bash
-curl -X GET http://localhost:3000/files \
-  -H "x-amzn-oidc-identity: user-123"
-```
-
-Response:
-```json
-{
-  "files": [
-    {
-      "file_id": "550e8400-e29b-41d4-a716-446655440000",
-      "filename": "document.pdf",
-      "size": 1024000,
-      "uploaded_at": "2025-12-08T10:30:00"
-    }
-  ]
-}
-```
-
-#### GET /download/{file_id}
-Generate a presigned URL for downloading a file
-```bash
-curl -X GET http://localhost:3000/download/550e8400-e29b-41d4-a716-446655440000 \
-  -H "x-amzn-oidc-identity: user-123"
-```
-
-Response:
-```json
-{
-  "file_id": "550e8400-e29b-41d4-a716-446655440000",
-  "filename": "document.pdf",
-  "download_url": "https://my-app-file-uploads-123.s3.us-east-1.amazonaws.com/users/user-123/550e8400/document.pdf?AWSAccessKeyId=...",
-  "expires_in_seconds": 3600
-}
-```
-
-#### DELETE /files/{file_id}
-Delete a file (user must own the file)
-```bash
-curl -X DELETE http://localhost:3000/files/550e8400-e29b-41d4-a716-446655440000 \
-  -H "x-amzn-oidc-identity: user-123"
-```
-
-Response:
-```json
-{
-  "message": "File deleted successfully"
-}
-```
-
-### S3 Bucket Configuration
-
-The S3 bucket is created with production-ready security settings:
-
-- **Block Public Access**: All 4 settings enabled
-- **Versioning**: Enabled for data protection and recovery
-- **Encryption**: AES-256 at rest (default)
-- **Lifecycle Policies**:
-  - Delete old versions after 90 days
-  - Abort incomplete multipart uploads after 7 days
-- **Bucket Policy**: Only backend ECS task role can access files
-
-### Accessing the Bucket
-
-View bucket details:
-```bash
-terraform output s3_file_uploads_bucket
-```
-
-Example output:
-```
-my-secure-app-file-uploads-123456789012
-```
-
-### Local Development
-
-For local testing, you'll need AWS credentials configured:
-
-```bash
-# Backend (requires AWS_REGION and S3_BUCKET_NAME env vars)
-export AWS_REGION="us-east-1"
-export S3_BUCKET_NAME="my-secure-app-file-uploads-123456789012"
-export TABLE_NAME="my-secure-app-table"
-uvicorn main:app --reload --port 3000
-```
-
-The backend will authenticate S3 requests using your local AWS credentials.
-
-### Cost Considerations
-
-**Estimated Monthly Cost (40MB-1GB usage)**:
-- S3 Storage: ~$0.023 per month
-- S3 PUT/GET requests: ~$1-5 (pay-per-request)
-- Data transfer: Minimal if within VPC
-
-**Cost Optimization Tips**:
-- Implement object expiration policies for temporary uploads
-- Use VPC Gateway endpoint for S3 to save NAT Gateway data transfer costs
-- Enable S3 Intelligent-Tiering for infrequently accessed files
-- Archive old files to S3 Glacier
-
-## Accessing the Application
-
-After successful deployment, Terraform will output important values:
-
-```bash
-# View all outputs
-terraform output
-
-# Get specific output
+# 6. Get application URL
 terraform output alb_dns_name
+# Open https://<alb_dns_name> in browser
 ```
 
-### Access Steps
+### Configuration Variables
 
-1.  **Get the ALB DNS Name**:
-    ```bash
-    terraform output alb_dns_name
-    ```
-    Example output: `my-secure-app-alb-1234567890.us-east-1.elb.amazonaws.com`
+| Variable | Description | Required |
+| :--- | :--- | :---: |
+| `aws_region` | AWS Region | No (default: us-east-1) |
+| `app_name` | Resource name prefix | No (default: my-secure-app) |
+| `cognito_domain_prefix` | Cognito hosted UI domain prefix - | **Yes** |
 
-2.  **Open in Browser**:
-    *   Navigate to `https://<alb_dns_name>`
-    *   Note: You'll see a browser warning about the self-signed certificate
-    *   Click "Advanced" → "Proceed to site" (Chrome) or "Accept the Risk" (Firefox)
+**Note:** Cognito domain prefix must be globally unique. A random suffix is auto-appended.
 
-3.  **Sign Up / Sign In**:
-    *   ALB automatically redirects to AWS Cognito Hosted UI
-    *   Click "Sign up" to create a new account
-    *   Enter your email and create a password (must meet policy requirements)
-    *   Verify your email with the code sent to your inbox
+## Features
 
-4.  **Access the Application**:
-    *   After authentication, ALB redirects you to the app frontend
-    *   ✅ User info is displayed on the page (email, sub, token expiration)
-    *   ✅ Try the text saver feature to test DynamoDB integration
-    *   ✅ Use the logout button to end your session
+**Authentication:**
+- Email/password signup and login
+- OAuth 2.0 authorization code flow
+- Session management with logout
 
-### Terraform Outputs
+**Sample App Functionality:**
+- User profile display
+- Text storage (DynamoDB CRUD)
+- File upload/download (S3 with presigned URLs, 40MB limit)
+- User-scoped file access
 
-| Output | Description | Example Value |
-| :--- | :--- | :--- |
-| `alb_dns_name` | Public DNS name of the ALB | `my-app-alb-123.us-east-1.elb.amazonaws.com` |
-| `cognito_user_pool_id` | Cognito User Pool ID | `us-east-1_aBcDeFgHi` |
-| `cognito_client_id` | Cognito App Client ID | `1a2b3c4d5e6f7g8h9i0j` |
-| `cognito_domain` | Cognito hosted UI domain | `my-secure-app-auth-123-abc123` |
-| `app_frontend_service_name` | ECS App Frontend Service name | `my-secure-app-app-frontend-service` |
-| `backend_service_name` | ECS Backend Service name | `my-secure-app-backend-service` |
-| `backend_service_url` | Internal backend URL | `http://backend.my-secure-app.local:3000` |
+**API Endpoints:**
+```
+GET  /health              # Health check
+POST /save                # Save text to DynamoDB
+GET  /items               # List all items
+POST /upload              # Upload file to S3
+GET  /download/{file_id}  # Get presigned download URL
+GET  /files               # List user's files
+DELETE /files/{file_id}   # Delete file
+```
+
+## Usage
+
+```bash
+# Get application URL
+terraform output alb_dns_name
+
+# Open https://<alb_dns_name> in browser
+# Accept self-signed certificate warning
+# Sign up with email and password
+# Test features: user info, text saver, file upload
+```
 
 ## Local Development
 
-### App Frontend Development
-
 ```bash
-cd app-frontend
+# Frontend
+cd app-frontend && npm install && npm run dev
 
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-
-# Build for production
-npm run build
-```
-
-**Note**: In local development, you'll need to handle authentication differently since ALB authentication is not available locally.
-
-### Backend Development
-
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run development server
+# Backend
+cd backend && pip install -r requirements.txt
 uvicorn main:app --reload --port 3000
 ```
 
-The backend API will run on `http://localhost:3000`.
-
-## Deployment Scripts ✅ AVAILABLE
-
-Convenience scripts for quick deployment:
+## Makefile Commands
 
 ```bash
-# Deploy app frontend
-./deploy-frontend.sh
-
-# Deploy backend
-./deploy-backend.sh
-
-# Test logout functionality
-./test-logout.sh
+make init              # Initialize Terraform
+make apply             # Deploy infrastructure
+make deploy-all        # Build and push both containers
+make logs-frontend     # View frontend logs
+make logs-backend      # View backend logs
+make destroy           # Destroy all resources
 ```
 
-## Makefile Commands ✅ AVAILABLE
-
-A Makefile is provided for streamlined infrastructure and application management:
+## Troubleshooting
 
 ```bash
-# Infrastructure commands
-make init          # Initialize Terraform
-make plan          # Preview infrastructure changes
-make apply         # Deploy infrastructure
-make destroy       # Destroy all infrastructure
-make output        # Show Terraform outputs
+# View logs
+aws logs tail /ecs/my-app-app-frontend --follow
+aws logs tail /ecs/my-app-backend --follow
 
-# Application deployment
-make deploy-frontend    # Build and push frontend image
-make deploy-backend     # Build and push backend image
-make deploy-all         # Deploy both frontend and backend
-
-# Service management
-make restart-frontend   # Force new deployment of frontend
-make restart-backend    # Force new deployment of backend
-make logs-frontend      # Tail frontend CloudWatch logs
-make logs-backend       # Tail backend CloudWatch logs
-
-# Cleanup
-make clean         # Clean Terraform files
-make clean-ecr     # Delete ECR repositories
-
-# Help
-make help          # Show all available commands
+# Check ECS service status
+aws ecs describe-services --cluster my-app-cluster --services my-app-app-frontend-service
 ```
 
-## Monitoring and Troubleshooting
+**Common Issues:**
+- Certificate warning: Expected with self-signed cert (use custom domain for production)
+- Tasks not starting: Check CloudWatch logs and IAM permissions
+- Health checks failing: Verify containers listen on port 3000
 
-### View ECS Service Status
+## Production Checklist
 
-```bash
-# List ECS services
-aws ecs list-services --cluster my-secure-app-cluster
+- [ ] Use custom domain with valid ACM certificate
+- [ ] Enable AWS WAF on ALB
+- [ ] Use AWS Secrets Manager for sensitive data
+- [ ] Enable VPC Flow Logs
+- [ ] Set up CloudWatch alarms
+- [ ] Enable GuardDuty
+- [ ] Multi-AZ NAT Gateways
+- [ ] Enable DynamoDB point-in-time recovery
+- [ ] Implement auto-scaling policies
 
-# Describe app frontend service
-aws ecs describe-services \
-  --cluster my-secure-app-cluster \
-  --services my-secure-app-app-frontend-service
+## Cost Estimate
 
-# Describe backend service
-aws ecs describe-services \
-  --cluster my-secure-app-cluster \
-  --services my-secure-app-backend-service
-```
+**Monthly (us-east-1):** ~$70-95
+- ECS Fargate: $20-35
+- ALB: $16-20
+- NAT Gateway: $32
+- DynamoDB: Pay-per-request (minimal)
+- S3: Pay-per-request (minimal)
+- CloudWatch Logs: $0.50-5
 
-### View CloudWatch Logs
-
-```bash
-# App Frontend logs
-aws logs tail /ecs/my-secure-app-app-frontend --follow
-
-# Backend logs
-aws logs tail /ecs/my-secure-app-backend --follow
-```
-
-### Common Issues
-
-#### 1. ECS Tasks Not Starting
-*   Check CloudWatch logs for container errors
-*   Verify ECR images are accessible
-*   Ensure IAM roles have correct permissions
-
-#### 2. ALB Health Checks Failing
-*   Verify container is listening on port 3000
-*   Check security group rules
-*   Review target group health check settings
-
-#### 3. Cognito Authentication Issues
-*   Verify callback URL is set to `/oauth2/idpresponse`
-*   Check Cognito user pool configuration
-*   Ensure Cognito client has `generate_secret = true`
-
-#### 4. Certificate Warnings
-*   This is expected with self-signed certificates
-*   For production, use a valid domain and ACM-issued certificate
-
-#### 5. Backend Communication Issues
-*   Verify service discovery is working: `backend.my-secure-app.local`
-*   Check security group allows traffic between ECS tasks
-*   Review backend logs for connection errors
-
-## Security Considerations
-
-### Current Implementation ✅ DEPLOYED
-*   ✅ HTTPS encryption with self-signed certificate
-*   ✅ All ECS tasks in private subnets (no public IPs)
-*   ✅ Security groups with minimal required access
-*   ✅ IAM roles with least-privilege permissions
-*   ✅ ALB-integrated Cognito authentication (OAuth 2.0 code flow)
-*   ✅ Authentication at ALB layer before application access
-*   ✅ User info passed securely via HTTP headers
-*   ✅ Simplified architecture (no separate login service)
-*   ✅ Service discovery for internal communication
-*   ✅ CORS properly configured for frontend-backend communication
-
-
-
-### Production Recommendations
-*   🔒 Use a custom domain with valid SSL certificate from ACM
-*   🔒 Enable AWS WAF on the ALB
-*   🔒 Implement AWS Secrets Manager for sensitive data
-*   🔒 Enable VPC Flow Logs for network monitoring
-*   🔒 Set up CloudWatch alarms for security events
-*   🔒 Enable AWS GuardDuty for threat detection
-*   🔒 Implement multi-AZ NAT Gateways for high availability
-*   🔒 Use AWS KMS for encryption at rest
-*   🔒 Enable DynamoDB point-in-time recovery
-
-## Cost Optimization
-
-### Estimated Monthly Costs (us-east-1)
-*   **ECS Fargate**: ~$20-35 (2 tasks: app frontend 0.5 vCPU/1GB + backend 0.25 vCPU/0.5GB)
-*   **Application Load Balancer**: ~$16-20
-*   **NAT Gateway**: ~$32 (single NAT)
-*   **DynamoDB**: Pay-per-request (minimal for dev/test)
-*   **CloudWatch Logs**: ~$0.50-5 (depending on log volume)
-*   **Data Transfer**: Variable based on usage
-
-**Total**: ~$70-95/month for development environment
-
-### Cost Reduction Tips
-*   Use AWS Free Tier where applicable
-*   Reduce ECS task count during off-hours
-*   Consider using VPC endpoints instead of NAT Gateway for AWS services
-*   Set up CloudWatch log retention policies
-*   Use AWS Cost Explorer to monitor spending
+**Reduce costs:** Use VPC endpoints, scale down during off-hours, leverage AWS Free Tier
 
 ## Cleanup
 
-To destroy all infrastructure and stop incurring charges:
-
 ```bash
-# Preview what will be destroyed
-terraform plan -destroy
-
-# Destroy all resources
 terraform destroy
 
-# Type 'yes' when prompted to confirm
-```
-
-**Warning**: This will permanently delete:
-*   All ECS services and tasks
-*   The Application Load Balancer
-*   VPC and networking components
-*   Cognito User Pool (and all users)
-*   DynamoDB table (and all data)
-
-**Note**: ECR repositories and container images are NOT automatically deleted. To remove them:
-
-```bash
-# Delete ECR repositories
+# Manually delete ECR repositories
 aws ecr delete-repository --repository-name my-app-app-frontend --force
 aws ecr delete-repository --repository-name my-app-backend --force
 ```
 
-## Project Structure ✅ CURRENT
+## Project Structure
 
 ```
-aws-terra/
-├── Makefile                    # Automation commands for deployment ✅
-├── app-frontend/                # Next.js 14 frontend (ALB-authenticated) ✅
-│   ├── app/                    # Next.js app directory
-│   │   ├── api/                # API routes
-│   │   │   ├── upload/         # POST /api/upload (file upload proxy)
-│   │   │   ├── files/          # GET /api/files (list user files)
-│   │   │   └── files/[fileId]/ # GET/DELETE /api/files/{fileId}
-│   │   ├── components/         # React components (UserInfo, TextSaver, FileUploader, LogoutButton)
-│   │   ├── logout-success/     # Logout success page
-│   │   ├── layout.tsx          # Root layout
-│   │   └── page.tsx            # Home page
-│   ├── Dockerfile              # App frontend container image
-│   ├── package.json            # Dependencies (Next.js 14, React 18)
-│   └── tsconfig.json           # TypeScript configuration
-│
-├── backend/                     # FastAPI backend (internal, VPC) ✅
-│   ├── main.py                 # FastAPI application with /health, /save, /items
-│   ├── requirements.txt        # Python dependencies (fastapi, boto3, uvicorn)
-│   └── Dockerfile              # Backend container image
-│
-├── userlogin/                   # Legacy - kept for reference
-│   └── (React + Vite app)
-│
-├── alb.tf                      # Application Load Balancer with Cognito auth ✅
-├── appregistry.tf              # AWS Service Catalog App Registry
-├── certificate.tf              # Self-signed SSL certificate ✅
-├── cognito.tf                  # AWS Cognito User Pool and Client ✅
-├── dynamodb.tf                 # DynamoDB table configuration ✅
-├── ecr.tf                      # ECR repositories ✅
-├── ecs.tf                      # ECS cluster, task definitions, and services ✅
-├── iam.tf                      # IAM roles and policies ✅
-├── outputs.tf                  # Terraform output values ✅
-├── provider.tf                 # AWS provider configuration ✅
-├── s3.tf                       # S3 bucket for file storage ✅
-├── security_groups.tf          # Security group rules ✅
-├── service_discovery.tf        # AWS Cloud Map configuration ✅
-├── variables.tf                # Input variables ✅
-├── vpc.tf                      # VPC, subnets, and networking ✅
-│
-├── deploy-frontend.sh          # Deployment script for app frontend ✅
-├── deploy-backend.sh           # Deployment script for backend ✅
-├── test-logout.sh              # Logout functionality test script ✅
-├── terraform.tfvars            # Variable values (gitignored)
-├── MIGRATION.md                # Migration guide to ALB authentication
-└── README.md                   # This file
+├── app-frontend/          # Next.js 14 frontend
+│   ├── app/               # App router, components, API routes
+│   └── Dockerfile
+├── backend/              # FastAPI backend
+│   ├── main.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── *.tf                  # Terraform modules
+├── deploy-*.sh           # Deployment scripts
+├── Makefile
+└── terraform.tfvars      # Your configuration
 ```
 
-## Infrastructure Resources Created
+**Terraform Modules:**
+- `vpc.tf` - VPC, subnets, NAT Gateway
+- `alb.tf` - Load balancer with Cognito auth
+- `ecs.tf` - Fargate services and task definitions
+- `cognito.tf` - User pool and client
+- `dynamodb.tf` - NoSQL table
+- `s3.tf` - File storage bucket
+- `iam.tf` - Roles and policies
+- `security_groups.tf` - Network security
+- `service_discovery.tf` - AWS Cloud Map
 
-This Terraform configuration creates the following AWS resources:
+## Customization
 
-| Resource Type | Count | Purpose |
-| :--- | :---: | :--- |
-| VPC | 1 | Network isolation |
-| Subnets | 4 | 2 public + 2 private across 2 AZs |
-| Internet Gateway | 1 | Public internet access |
-| NAT Gateway | 1 | Outbound internet for private subnets |
-| Elastic IP | 1 | For NAT Gateway |
-| Route Tables | 2 | Public and private routing |
-| Security Groups | 2 | ALB and ECS task security |
-| Application Load Balancer | 1 | Traffic distribution + authentication |
-| Target Group | 1 | App frontend service targets |
-| ALB Listeners | 2 | HTTP (redirect) + HTTPS (with Cognito auth) |
-| ACM Certificate | 1 | Self-signed SSL certificate |
-| ECS Cluster | 1 | Container orchestration |
-| ECS Task Definitions | 2 | App Frontend + Backend |
-| ECS Services | 2 | App Frontend (ALB) + Backend (VPC) |
-| Service Discovery Namespace | 1 | Private DNS namespace |
-| Service Discovery Service | 1 | Backend service registration |
-| IAM Roles | 2 | Task execution + Task role |
-| IAM Policies | 2+ | Permissions for ECS and DynamoDB |
-| Cognito User Pool | 1 | User authentication |
-| Cognito User Pool Client | 1 | OAuth application (ALB-integrated) |
-| Cognito Domain | 1 | Hosted UI domain |
-| DynamoDB Table | 1 | Application data storage |
-| S3 Bucket | 1 | User file storage (private, user-scoped) |
-| CloudWatch Log Groups | 2 | ECS task logs |
+**Replace sample apps:**
+1. Update `app-frontend/` and `backend/` with your code
+2. Ensure containers expose port 3000
+3. Rebuild and push: `./deploy-frontend.sh && ./deploy-backend.sh`
 
-**Total**: ~33-37 resources
+**Add services:**
+1. Duplicate task definition in `ecs.tf`
+2. Add service discovery entry
+3. Update security groups
 
-## Updating the Infrastructure
-
-### Update ECS Task Configuration
-
-To change CPU/memory allocation or environment variables:
-
-1. Edit the relevant section in `ecs.tf`
-2. Apply changes:
+**Scale services:**
 ```bash
-terraform apply
+# Edit desired_count in ecs.tf, or:
+aws ecs update-service --cluster my-app-cluster \
+  --service my-app-app-frontend-service --desired-count 2
 ```
 
-### Update Container Images
-
-To deploy new versions of your application:
-
-```bash
-# Build and push new images (see Step 2 in Deployment)
-# Then force new deployment
-aws ecs update-service \
-  --cluster my-secure-app-cluster \
-  --service my-secure-app-app-frontend-service \
-  --force-new-deployment
-```
-
-### Scale Services
-
-To change the number of running tasks:
-
-```bash
-# Update desired_count in ecs.tf
-# Or use AWS CLI
-aws ecs update-service \
-  --cluster my-secure-app-cluster \
-  --service my-secure-app-app-frontend-service \
-  --desired-count 2
-```
-
-## Advanced Configuration
-
-### Custom Domain Setup
-
-To use a custom domain instead of the ALB DNS name:
-
-1. Register a domain in Route 53
-2. Request a certificate in ACM for your domain
-3. Update `certificate.tf` to use the ACM certificate ARN
-4. Create a Route 53 alias record pointing to the ALB
-5. Update Cognito callback URLs with your custom domain
-
-### Multi-Region Deployment
-
-To deploy in multiple regions:
-
-1. Create a new directory for each region
-2. Copy all `.tf` files
-3. Update `terraform.tfvars` with region-specific values
-4. Deploy separately in each region
-
-### CI/CD Integration
-
-Example GitHub Actions workflow:
-
-```yaml
-name: Deploy to AWS
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-      
-      - name: Build and push images
-        run: |
-          # Build and push user login
-          cd userlogin
-          docker build -t my-app-userlogin .
-          # ... push to ECR
-      
-      - name: Deploy with Terraform
-        run: |
-          terraform init
-          terraform apply -auto-approve
-```
-
-## Troubleshooting Guide
-
-### Issue: "Cognito domain already exists"
-
-**Solution**: The `cognito_domain_prefix` must be globally unique. Change it in `terraform.tfvars` and reapply.
-
-### Issue: "No space left on device" during Docker build
-
-**Solution**: Clean up Docker images and containers:
-```bash
-docker system prune -a
-```
-
-### Issue: ECS tasks are stuck in "PENDING" state
-
-**Possible causes**:
-1. ECR image not accessible → Check IAM permissions
-2. No available IP addresses → Check subnet CIDR blocks
-3. Resource limits → Check AWS service quotas
-
-### Issue: ALB returns 503 errors
-
-**Possible causes**:
-1. No healthy targets → Check ECS task health
-2. Security group blocking traffic → Verify security group rules
-3. Container not listening on correct port → Check Dockerfile EXPOSE
-
-### Issue: Terraform state is locked
-
-**Solution**:
-```bash
-# Force unlock (use with caution)
-terraform force-unlock <lock-id>
-```
-
-## Best Practices
-
-### Security
-*   ✅ Never commit `terraform.tfvars` or `.tfstate` files to version control
-*   ✅ Use AWS Secrets Manager for sensitive data
-*   ✅ Enable MFA for AWS account
-*   ✅ Regularly rotate IAM credentials
-*   ✅ Use VPC endpoints for AWS services to avoid NAT Gateway costs
-
-### Infrastructure Management
-*   ✅ Use remote state backend (S3 + DynamoDB) for team collaboration
-*   ✅ Tag all resources for cost tracking
-*   ✅ Use Terraform workspaces for multiple environments
-*   ✅ Implement automated testing with Terratest
-*   ✅ Document all infrastructure changes
-
-### Application Development
-*   ✅ Use environment variables for configuration
-*   ✅ Implement health check endpoints
-*   ✅ Use structured logging (JSON format)
-*   ✅ Implement graceful shutdown handling
-*   ✅ Use connection pooling for database access
-
-## FAQ
-
-**Q: Can I use this for production?**
-A: This is a solid foundation, but you should implement the production recommendations in the Security Considerations section.
-
-**Q: How do I add more backend services?**
-A: Duplicate the backend task definition and service in `ecs.tf`, update the names, and configure service discovery or internal load balancing.
-
-**Q: Can I use RDS instead of DynamoDB?**
-A: Yes, create an RDS instance in `database.tf`, update security groups, and modify the backend environment variables.
-
-**Q: How do I enable auto-scaling?**
-A: Add `aws_appautoscaling_target` and `aws_appautoscaling_policy` resources to scale based on CPU/memory or custom metrics.
-
-**Q: What if I don't have a backend yet?**
-A: You can comment out the backend-related resources in `ecs.tf` and deploy only the app frontend service.
-
-**Q: How does the app frontend communicate with the backend?**
-A: ✅ The app frontend service communicates directly with the backend service within the VPC using AWS Cloud Map service discovery (`backend.my-secure-app.local:3000`). Both services are in private subnets with no internet exposure. Security groups allow traffic between ECS tasks.
-
-**Q: How does authentication work?**
-A: ✅ The ALB handles all authentication with Cognito. When a user accesses the app, the ALB redirects to Cognito for login, validates the token, and passes user info to the app frontend via HTTP headers (`x-amzn-oidc-data`, `x-amzn-oidc-identity`, `x-amzn-oidc-accesstoken`). The app frontend decodes these headers to display user information.
-
-**Q: What features are currently working?**
-A: ✅ All core features are operational:
-- User authentication via Cognito
-- User info display (email, sub, token expiration)
-- Text saver with DynamoDB integration
-- Backend API endpoints (/health, /save, /items)
-- Logout functionality with session cleanup
-- Service discovery for internal communication
-- CloudWatch logging for both services
-
-**Q: Can I use a different authentication provider?**
-A: Yes, ALB supports OIDC-compliant identity providers. Update the listener action in `alb.tf` to use `authenticate-oidc` instead of `authenticate-cognito`.
-
-**Q: How do I access uploaded files?**
-A: ✅ Users upload files via the FileUploader component. The backend stores files in S3 (organized by user ID) and returns presigned URLs. Users can download their files via secure presigned URLs that expire after 1 hour. Each file request validates user ownership via metadata stored in DynamoDB.
-
-**Q: What is the file size limit?**
-A: ✅ The default limit is 40MB per file. This is set in the `MAX_FILE_SIZE_MB` environment variable in the backend task definition (`ecs.tf`). Adjust the value and redeploy if needed.
-
-**Q: Can users share files with other users?**
-A: ✅ Currently, the system enforces user-scoped file access (users can only access their own files). To add file sharing, you would need to create a separate permissions table in DynamoDB and update the backend authorization logic.
-
-**Q: What happens to deleted files in S3?**
-A: ✅ When a user deletes a file, the backend removes the S3 object and deletes the metadata from DynamoDB. S3 versioning is enabled, so deleted versions are retained for 90 days before auto-deletion (per the lifecycle policy). This allows recovery of accidentally deleted files if needed.
-
-**Q: How are presigned URLs generated and secured?**
-A: ✅ Presigned URLs are generated by the backend using AWS SDK (`boto3`). Each URL includes a cryptographic signature and is valid for 1 hour. The URL is user-specific (via AWS credentials) and includes the S3 key and required permissions. Expiration prevents unauthorized access after the time window closes.
-
-## Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-Please ensure:
-*   Code follows Terraform best practices
-*   All resources are properly tagged
-*   Documentation is updated
-*   Changes are tested in a development environment
+**Custom domain:**
+1. Request ACM certificate for your domain
+2. Update `certificate.tf` with ACM ARN
+3. Create Route 53 alias to ALB
+4. Update Cognito callback URLs
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-*   AWS for comprehensive documentation
-*   Terraform for infrastructure-as-code capabilities
-*   The open-source community for inspiration and best practices
-
-## Quick Start Guide
-
-For first-time users:
-
-1. **Clone and Configure**:
-   ```bash
-   git clone <repository>
-   cd aws-terra
-   cp terraform.tfvars.example terraform.tfvars  # Edit with your values
-   ```
-
-2. **Deploy Infrastructure**:
-   ```bash
-   terraform init
-   terraform apply
-   ```
-
-3. **Build and Deploy Applications**:
-   ```bash
-   ./deploy-backend.sh
-   ./deploy-frontend.sh
-   ```
-
-4. **Access Application**:
-   ```bash
-   terraform output alb_dns_name
-   # Open https://<alb_dns_name> in browser
-   ```
-
-## Support
-
-For issues and questions:
-*   Open an issue in the GitHub repository
-*   Check AWS documentation for service-specific questions
-*   Review Terraform documentation for configuration syntax
-*   See MIGRATION.md for architecture evolution details
-
-## Current Status Summary
-
-### ✅ Fully Operational Components
-1. **Infrastructure**: VPC, subnets, NAT Gateway, Internet Gateway
-2. **Load Balancing**: ALB with HTTPS and Cognito authentication
-3. **Compute**: ECS Fargate cluster with 2 services (app frontend + backend)
-4. **Authentication**: Cognito User Pool with hosted UI
-5. **Storage**: DynamoDB table with pay-per-request billing
-6. **File Storage**: S3 bucket with user-scoped access and presigned URLs ✅
-7. **Networking**: Service discovery via AWS Cloud Map
-8. **Security**: Security groups, IAM roles, private subnets
-9. **Monitoring**: CloudWatch logs with 7-day retention
-10. **Container Registry**: ECR repositories for both services
-
-### ✅ Working Features
-1. **User Authentication**: Sign up, sign in, email verification
-2. **User Info Display**: Email, sub, token expiration
-3. **Text Saver**: Save and retrieve text from DynamoDB
-4. **File Storage**: Upload, download (presigned URLs), list, delete files ✅
-5. **Logout**: Proper session cleanup and redirect
-6. **Backend API**: Health check, save, retrieve, and file endpoints
-7. **Internal Communication**: Frontend → Backend via service discovery
-
-### 🚧 Known Limitations
-1. **Self-signed Certificate**: Browser warnings expected (use custom domain for production)
-2. **Single NAT Gateway**: Consider multi-AZ for high availability
-3. **No Auto-scaling**: Fixed task count (easily configurable)
-4. **Development Environment**: Optimized for dev/test, not production-hardened
-
-### 🚀 Next Steps for Production
-1. Use custom domain with valid ACM certificate
-2. Enable AWS WAF on ALB
-3. Implement auto-scaling policies
-4. Add multi-AZ NAT Gateways
-5. Enable DynamoDB point-in-time recovery
-6. Set up CloudWatch alarms
-7. Implement CI/CD pipeline
-8. Add comprehensive monitoring and alerting
+MIT License
 
 ---
 
-**Written by Ronen Azachi**
-
-**Built with ❤️ using Terraform and AWS**
-
-**Status**: ✅ Fully Deployed and Operational
+**Built by Ronen Azachi** | Terraform + AWS
 
