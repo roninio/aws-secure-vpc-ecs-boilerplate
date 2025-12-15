@@ -6,6 +6,9 @@ import os
 import uuid
 from datetime import datetime, timedelta
 import logging
+import jwt
+import requests
+from functools import lru_cache
 
 logging.basicConfig(level=logging.INFO)
 
@@ -41,11 +44,61 @@ class FileMetadata(BaseModel):
     download_url: str
 
 
-def get_user_id_from_headers(x_amzn_oidc_identity: str = Header(None)) -> str:
-    """Extract user ID from ALB OIDC headers"""
-    if not x_amzn_oidc_identity:
+@lru_cache(maxsize=128)
+def get_alb_public_key(kid: str, region: str) -> str:
+    """Fetch ALB public key for JWT verification"""
+    url = f"https://public-keys.auth.elb.{region}.amazonaws.com/{kid}"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        return response.text
+    except Exception as e:
+        logging.error(f"Failed to fetch ALB public key: {str(e)}")
+        raise HTTPException(status_code=500, detail="Authentication service unavailable")
+
+
+def verify_alb_jwt(x_amzn_oidc_data: str = Header(None)) -> dict:
+    """Verify ALB JWT token and return payload"""
+    if not x_amzn_oidc_data:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return x_amzn_oidc_identity
+    
+    try:
+        # Decode header to get key ID
+        header = jwt.get_unverified_header(x_amzn_oidc_data)
+        kid = header.get('kid')
+        if not kid:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Get public key and verify signature
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        public_key = get_alb_public_key(kid, region)
+        
+        # Verify and decode token
+        payload = jwt.decode(
+            x_amzn_oidc_data,
+            public_key,
+            algorithms=['ES256'],
+            options={"verify_exp": True}
+        )
+        
+        logging.info(f"JWT verified for user: {payload.get('sub')}")
+        return payload
+        
+    except jwt.ExpiredSignatureError:
+        logging.warning("Expired JWT token")
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError as e:
+        logging.warning(f"Invalid JWT token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        logging.error(f"JWT verification error: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+
+def get_user_id_from_headers(x_amzn_oidc_data: str = Header(None)) -> str:
+    """Extract and verify user ID from ALB OIDC JWT"""
+    payload = verify_alb_jwt(x_amzn_oidc_data)
+    return payload.get('sub')  # 'sub' contains the user ID
 
 
 @app.get("/health")
@@ -83,12 +136,12 @@ def get_items():
 # File upload endpoint
 @app.post("/upload")
 async def upload_file(
-    file: UploadFile = File(...), x_amzn_oidc_identity: str = Header(None)
+    file: UploadFile = File(...), x_amzn_oidc_data: str = Header(None)
 ):
     """Upload a file to S3. Only authenticated users can upload."""
     try:
         # Validate authentication
-        user_id = get_user_id_from_headers(x_amzn_oidc_identity)
+        user_id = get_user_id_from_headers(x_amzn_oidc_data)
 
         # Read file content
         contents = await file.read()
@@ -148,11 +201,11 @@ async def upload_file(
 
 # File download endpoint (generates presigned URL)
 @app.get("/download/{file_id}")
-def download_file(file_id: str, x_amzn_oidc_identity: str = Header(None)):
+def download_file(file_id: str, x_amzn_oidc_data: str = Header(None)):
     """Get a presigned download URL for a file. User must own the file."""
     try:
         # Validate authentication
-        user_id = get_user_id_from_headers(x_amzn_oidc_identity)
+        user_id = get_user_id_from_headers(x_amzn_oidc_data)
 
         # Get file metadata from DynamoDB
         response = table.get_item(Key={"id": file_id})
@@ -192,14 +245,11 @@ def download_file(file_id: str, x_amzn_oidc_identity: str = Header(None)):
 
 # List user files
 @app.get("/files")
-def list_user_files(x_amzn_oidc_identity: str = Header(None)):
+def list_user_files(x_amzn_oidc_data: str = Header(None)):
     """List all files uploaded by the authenticated user."""
     try:
-        # Debug logging
-        logging.info(f"Files endpoint called with header: {x_amzn_oidc_identity}")
-
         # Validate authentication
-        user_id = get_user_id_from_headers(x_amzn_oidc_identity)
+        user_id = get_user_id_from_headers(x_amzn_oidc_data)
 
         # Query DynamoDB for user's files
         response = table.scan(
@@ -231,11 +281,11 @@ def list_user_files(x_amzn_oidc_identity: str = Header(None)):
 
 # Delete file
 @app.delete("/files/{file_id}")
-def delete_file(file_id: str, x_amzn_oidc_identity: str = Header(None)):
+def delete_file(file_id: str, x_amzn_oidc_data: str = Header(None)):
     """Delete a file. User must own the file."""
     try:
         # Validate authentication
-        user_id = get_user_id_from_headers(x_amzn_oidc_identity)
+        user_id = get_user_id_from_headers(x_amzn_oidc_data)
 
         # Get file metadata from DynamoDB
         response = table.get_item(Key={"id": file_id})
