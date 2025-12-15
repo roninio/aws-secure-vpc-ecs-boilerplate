@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { fileId: string } }
+  { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
     const oidcIdentity = request.headers.get('x-amzn-oidc-identity');
@@ -15,7 +15,7 @@ export async function GET(
     }
 
     const backendUrl = process.env.BACKEND_URL || 'http://backend.my-secure-app.local:3000';
-    const fileId = params.fileId;
+    const { fileId } = await params;
 
     const response = await fetch(`${backendUrl}/download/${fileId}`, {
       method: 'GET',
@@ -37,7 +37,7 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { fileId: string } }
+  { params }: { params: Promise<{ fileId: string }> }
 ) {
   try {
     const oidcIdentity = request.headers.get('x-amzn-oidc-identity');
@@ -50,7 +50,7 @@ export async function DELETE(
     }
 
     const backendUrl = process.env.BACKEND_URL || 'http://backend.my-secure-app.local:3000';
-    const fileId = params.fileId;
+    const { fileId } = await params;
 
     const response = await fetch(`${backendUrl}/files/${fileId}`, {
       method: 'DELETE',
