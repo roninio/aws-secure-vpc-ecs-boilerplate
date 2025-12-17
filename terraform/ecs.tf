@@ -40,7 +40,7 @@ resource "aws_ecs_task_definition" "backend" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
-  memory                   = "512"
+  memory                   = "1024"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
@@ -137,6 +137,10 @@ resource "aws_ecs_task_definition" "app_frontend" {
           value = "http://backend.${var.app_name}.local:3000"
         },
         {
+          name  = "NEXT_PUBLIC_BACKEND_URL"
+          value = "http://backend.${var.app_name}.local:3000"
+        },
+        {
           name  = "COGNITO_DOMAIN"
           value = "${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com"
         },
@@ -168,6 +172,7 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = 1
   launch_type     = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     subnets          = aws_subnet.private[*].id

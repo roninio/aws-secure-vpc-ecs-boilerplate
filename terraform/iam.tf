@@ -55,6 +55,38 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_logs" {
   policy_arn = aws_iam_policy.ecs_task_execution_logs.arn
 }
 
+# Policy to enable ECS Exec (SSM Session Manager)
+resource "aws_iam_policy" "ecs_exec" {
+  name        = "${var.app_name}-ecs-exec"
+  description = "Allow ECS Exec to connect to containers via SSM"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.app_name}-ecs-exec"
+    Description = "Allows ECS Exec to connect to containers via SSM Session Manager"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_ecs_exec" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_exec.arn
+}
+
 # ECS Task Role (for the application to access AWS services like DynamoDB)
 resource "aws_iam_role" "ecs_task_role" {
   name = "${var.app_name}-ecs-task-role"
