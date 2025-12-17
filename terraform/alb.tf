@@ -90,6 +90,68 @@ resource "aws_lb_listener" "https" {
   }
 }
 
+resource "aws_lb_target_group" "backend" {
+  name        = "${var.app_name}-backend-tg"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200"
+  }
+
+  deregistration_delay = 30
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name        = "${var.app_name}-backend-tg"
+    Description = "Target group for backend ECS service"
+  }
+}
+
+resource "aws_lb_listener_rule" "backend_api" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 100
+
+  action {
+    type  = "authenticate-cognito"
+    order = 1
+
+    authenticate_cognito {
+      user_pool_arn              = aws_cognito_user_pool.main.arn
+      user_pool_client_id        = aws_cognito_user_pool_client.client.id
+      user_pool_domain           = aws_cognito_user_pool_domain.main.domain
+      on_unauthenticated_request = "authenticate"
+      session_timeout            = 3600
+      session_cookie_name        = "AWSELBAuthSessionCookie"
+    }
+  }
+
+  action {
+    type             = "forward"
+    order            = 2
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+}
+
+
 
 
 

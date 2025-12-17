@@ -184,6 +184,13 @@ resource "aws_ecs_service" "backend" {
     registry_arn = aws_service_discovery_service.backend.arn
   }
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.backend.arn
+    container_name   = "backend"
+    container_port   = 3000
+  }
+
+
   tags = merge(
     local.common_tags,
     {
